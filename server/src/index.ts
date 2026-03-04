@@ -16,7 +16,8 @@ if (process.env.NODE_ENV !== 'production') {
 
 const gameServer = new Server({ transport })
 
-gameServer.define('kingdom_wars', KingdomWarsRoom)
+// filterBy('roomCode') allows client.join('kingdom_wars', { roomCode: 'ABC123' })
+gameServer.define('kingdom_wars', KingdomWarsRoom).filterBy(['roomCode'])
 
 gameServer.listen(SERVER_PORT).then(() => {
   console.log(`Colyseus listening on ws://localhost:${SERVER_PORT}`)
