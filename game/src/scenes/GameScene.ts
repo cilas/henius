@@ -154,6 +154,7 @@ export class GameScene extends Phaser.Scene {
     
     layer0.setDepth(-1)
     layer1.setDepth(0)
+    layer1.y = -64 // Visual height offset
 
     for (let r = 0; r < GRID_ROWS; r++) {
       for (let c = 0; c < GRID_COLS; c++) {
@@ -211,6 +212,7 @@ export class GameScene extends Phaser.Scene {
 
     // ── Tower-slot highlight ─────────────
     const slotGfx = this.add.graphics().setDepth(1)
+    slotGfx.y = -64 // Match the visual offset of Layer 1
     slotGfx.lineStyle(1, 0x88ff88, 0.2)
     slotGfx.fillStyle(0x88ff88, 0.06)
     for (const [c, r] of TOWER_SLOTS) {
@@ -225,10 +227,11 @@ export class GameScene extends Phaser.Scene {
       .setDepth(SPAWN_POINT.y + TILE_SIZE / 2)
       .setFlipX(true)
 
-    this.add.image(CASTLE_POSITION.x + TILE_SIZE * 0.5, CASTLE_POSITION.y + TILE_SIZE / 2, 'castle-blue')
+    this.add.image(CASTLE_POSITION.x + TILE_SIZE * 0.5, CASTLE_POSITION.y + TILE_SIZE / 2 - 64, 'castle-blue') // -64 to match elevation 1
       .setScale(0.5)
       .setOrigin(0.5, 1)
-      .setDepth(CASTLE_POSITION.y + TILE_SIZE / 2)
+      // Depth is based on logical y so it sorts correctly against actors that might be at this logical row
+      .setDepth(CASTLE_POSITION.y + TILE_SIZE / 2 - 64)
 
     this.createCastleHpBar()
   }
@@ -275,7 +278,7 @@ export class GameScene extends Phaser.Scene {
     const BAR_W = 160
     const BAR_H = 20
     const cx = CASTLE_POSITION.x - 40
-    const cy = CASTLE_POSITION.y - 72
+    const cy = CASTLE_POSITION.y - 72 - 64 // Shifted block
 
     // Fill tile (tinted green, clipped to current hp ratio)
     this.castleBarFill = this.add.tileSprite(cx, cy, BAR_W, BAR_H, 'bar-big-fill')

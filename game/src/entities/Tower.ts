@@ -151,7 +151,7 @@ export class Tower extends Phaser.GameObjects.Container {
     const cfg = TOWER_CONFIGS[this.towerType]
     const pierce = this.towerType === 'lancer' ? 2 : 1
     // Offset spawn slightly up so arrow shoots from the unit's body/bow, not their feet
-    const projectile = new Projectile(this.scene, this.x, this.y - 32, target, cfg.damage, pierce)
+    const projectile = new Projectile(this.scene, this.x, this.y - 96, target, cfg.damage, pierce)
     projectiles.push(projectile)
 
     // Warrior splash: damage nearby enemies in range immediately
