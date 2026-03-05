@@ -6,6 +6,27 @@ export class MenuScene extends Phaser.Scene {
     super({ key: 'MenuScene' })
   }
 
+  private makeMenuButton(
+    x: number, y: number, w: number, h: number,
+    label: string, onClick: () => void,
+    tintHover = 0xddeeFF,
+    tintPress?: number,
+  ): void {
+    const normal  = this.add.nineslice(x, y,     'btn-blue',       undefined, w, h, 32, 32, 32, 32).setInteractive({ cursor: 'pointer' })
+    const pressed = this.add.nineslice(x, y + 4, 'btn-blue-press', undefined, w, h, 32, 32, 32, 32).setVisible(false)
+    const txt = this.add.text(x, y, label, {
+      fontSize: '20px', fontStyle: 'bold',
+      color: '#ffffff', stroke: '#1a3a6a', strokeThickness: 4,
+    }).setOrigin(0.5)
+
+    if (tintPress !== undefined) normal.setTint(tintPress)
+
+    normal.on('pointerover', () => normal.setTint(tintHover))
+    normal.on('pointerout',  () => { normal.setTint(tintPress ?? 0xffffff); if (tintPress === undefined) normal.clearTint(); normal.setVisible(true); pressed.setVisible(false); txt.setY(y) })
+    normal.on('pointerdown', () => { normal.setVisible(false); pressed.setVisible(true); txt.setY(y + 4) })
+    normal.on('pointerup',   () => { normal.setVisible(true);  pressed.setVisible(false); txt.setY(y); onClick() })
+  }
+
   create(): void {
     // ── Background — tiled wood table texture ─────────────────────────────
     this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, 'wood-table')
@@ -118,54 +139,27 @@ export class MenuScene extends Phaser.Scene {
       }).setOrigin(0, 0.5)
     })
 
-    // ── Start button — BigBlueButton NineSlice ────────────────────────────
+    // ── Buttons ───────────────────────────────────────────────────────────
     const btnX = GAME_WIDTH / 2
-    const btnY = 610
-    const btnW = 240
-    const btnH = 72
+    const btnW = 260
+    const btnH = 66
 
-    // Use nineslice so the button stretches cleanly without distortion
-    const btnNormal = this.add.nineslice(btnX, btnY, 'btn-blue', undefined, btnW, btnH, 32, 32, 32, 32)
-    btnNormal.setInteractive({ cursor: 'pointer' })
-
-    const btnPressed = this.add.nineslice(btnX, btnY + 4, 'btn-blue-press', undefined, btnW, btnH, 32, 32, 32, 32)
-    btnPressed.setVisible(false)
-
-    const btnText = this.add.text(btnX, btnY, 'START GAME', {
-      fontSize: '22px',
-      fontStyle: 'bold',
-      color: '#ffffff',
-      stroke: '#1a3a6a',
-      strokeThickness: 4,
-    }).setOrigin(0.5)
-
-    const startGame = () => {
+    this.makeMenuButton(btnX, 570, btnW, btnH, 'TOWER DEFENSE', () => {
       this.scene.start('GameScene')
       this.scene.launch('UIScene')
-    }
-
-    btnNormal.on('pointerover', () => {
-      btnNormal.setTint(0xddeeFF)
-    })
-    btnNormal.on('pointerout', () => {
-      btnNormal.clearTint()
-      btnNormal.setVisible(true)
-      btnPressed.setVisible(false)
-      btnText.setY(btnY)
-    })
-    btnNormal.on('pointerdown', () => {
-      btnNormal.setVisible(false)
-      btnPressed.setVisible(true)
-      btnText.setY(btnY + 4)
-    })
-    btnNormal.on('pointerup', () => {
-      btnNormal.setVisible(true)
-      btnPressed.setVisible(false)
-      btnText.setY(btnY)
-      startGame()
     })
 
-    this.input.keyboard!.once('keydown-ENTER', startGame)
-    this.input.keyboard!.once('keydown-SPACE', startGame)
+    this.makeMenuButton(btnX, 655, btnW, btnH, '⚔  KINGDOM WARS', () => {
+      this.scene.start('LobbyScene')
+    }, 0xb84a00, 0x7a2e00)
+
+    this.input.keyboard!.once('keydown-ENTER', () => {
+      this.scene.start('GameScene')
+      this.scene.launch('UIScene')
+    })
+    this.input.keyboard!.once('keydown-SPACE', () => {
+      this.scene.start('GameScene')
+      this.scene.launch('UIScene')
+    })
   }
 }
