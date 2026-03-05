@@ -162,9 +162,27 @@ export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMeta
       this.simulation.update(deltaTime)
 
       if (this.state.timer <= 0) {
-        this.endGame(null, 'timeout')
+        this.endGame(this.resolveTimeoutWinner(), 'timeout')
       }
     }, SERVER_TICK_RATE)
+  }
+
+  private resolveTimeoutWinner(): string | null {
+    let winnerId: string | null = null
+    let maxHp = -1
+    let tie = false
+
+    this.state.players.forEach((player, id) => {
+      if (player.castleHp > maxHp) {
+        maxHp    = player.castleHp
+        winnerId = id
+        tie      = false
+      } else if (player.castleHp === maxHp) {
+        tie = true
+      }
+    })
+
+    return tie ? null : winnerId
   }
 
   endGame(winnerId: string | null, reason: string) {

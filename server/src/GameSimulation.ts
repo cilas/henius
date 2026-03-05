@@ -1,6 +1,7 @@
 import {
   UNIT_STATS, TOWER_STATS, CASTLE_DAMAGE_MULTIPLIER,
   UNIT_SEND_COOLDOWN_MS,
+  PASSIVE_INCOME_AMOUNT, PASSIVE_INCOME_INTERVAL_S,
   PVP_WAYPOINTS_L2R, PVP_WAYPOINTS_R2L,
   PVP_SPAWN_LEFT, PVP_SPAWN_RIGHT,
   TILE_SIZE, encodeSlotId, decodeSlotId,
@@ -45,6 +46,10 @@ export class GameSimulation {
 
   private unitIdCounter  = 0
   private towerIdCounter = 0
+
+  // Passive income accumulator (ms since last payout)
+  private passiveIncomeAccMs = 0
+  private readonly passiveIncomeIntervalMs = PASSIVE_INCOME_INTERVAL_S * 1000
 
   constructor(
     state:     GameState,
@@ -136,6 +141,13 @@ export class GameSimulation {
 
   update(deltaMs: number): void {
     if (this.state.phase !== 'battle') return
+
+    // Passive income
+    this.passiveIncomeAccMs += deltaMs
+    while (this.passiveIncomeAccMs >= this.passiveIncomeIntervalMs) {
+      this.passiveIncomeAccMs -= this.passiveIncomeIntervalMs
+      this.awardPassiveIncome()
+    }
 
     // Build a flat tower list with world positions (used for proximity checks)
     const towers = this.collectTowers()
@@ -450,6 +462,15 @@ export class GameSimulation {
           player.towers.splice(i, 1)
         }
       }
+    })
+  }
+
+  // ── Passive income ─────────────────────────────────────────────────────────
+
+  private awardPassiveIncome(): void {
+    this.state.players.forEach((player, sessionId) => {
+      player.gold += PASSIVE_INCOME_AMOUNT
+      this.broadcast('passive_income', { sessionId, gold: player.gold })
     })
   }
 
