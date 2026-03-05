@@ -287,10 +287,8 @@ export class LobbyScene extends Phaser.Scene {
 
     // Listen for server-driven phase change (battle starts)
     room.onMessage('phase_changed', (data: { phase: string }) => {
-      if (data.phase === 'battle') {
-        this.scene.start('PvPGameScene')
-      } else if (data.phase === 'setup') {
-        this.scene.start('PvPGameScene')
+      if (data.phase === 'battle' || data.phase === 'setup') {
+        this.scene.start('PvPGameScene', { side: this.mySide })
       }
     })
 
