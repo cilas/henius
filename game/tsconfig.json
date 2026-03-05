@@ -12,7 +12,10 @@
     "noEmit": true,
     "strict": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+    "paths": {
+      "@kingdom-wars/shared": ["../shared/src/index.ts"]
+    }
   },
   "include": ["src"]
 }
