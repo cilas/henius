@@ -4,6 +4,7 @@ import { BootScene } from './scenes/BootScene.ts'
 import { MenuScene } from './scenes/MenuScene.ts'
 import { GameScene } from './scenes/GameScene.ts'
 import { UIScene } from './scenes/UIScene.ts'
+import { LobbyScene } from './scenes/LobbyScene.ts'
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -11,7 +12,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   height: GAME_HEIGHT,
   backgroundColor: '#1a1a2e',
   pixelArt: true,
-  scene: [BootScene, MenuScene, GameScene, UIScene],
+  scene: [BootScene, MenuScene, GameScene, UIScene, LobbyScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
