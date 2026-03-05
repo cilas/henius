@@ -1,11 +1,14 @@
 import { Room, Client } from '@colyseus/core'
 import { GameState } from '../schemas/GameState'
 import { PlayerState } from '../schemas/PlayerState'
+import { GameSimulation } from '../GameSimulation'
 import {
   MAX_PLAYERS,
   SETUP_PHASE_DURATION_S,
   BATTLE_TIMEOUT_S,
   SERVER_TICK_RATE,
+  STARTING_GOLD,
+  CASTLE_HP,
 } from '@kingdom-wars/shared'
 
 interface RoomMetadata {
@@ -24,6 +27,8 @@ function generateSeed(): number {
 export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMetadata }> {
   maxClients = MAX_PLAYERS
 
+  private simulation!: GameSimulation
+
   onCreate(options: { playerName?: string }) {
     const roomCode = generateRoomCode()
 
@@ -33,7 +38,39 @@ export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMeta
     this.metadata = { roomCode, hostName: options.playerName ?? 'Player 1' }
     console.log(`[Room ${this.roomId}] created — code: ${roomCode}`)
 
+    // Create simulation (state is ready; players join later)
+    this.simulation = new GameSimulation(
+      this.state,
+      (type, data) => this.broadcast(type, data),
+      (winnerId, reason) => this.endGame(winnerId, reason),
+    )
+
+    // ── Message handlers ────────────────────────────────────────────────────
     this.onMessage('ready', (client) => this.handleReady(client))
+
+    this.onMessage('place_tower', (client, msg: { slotId: number; towerType: string }) => {
+      if (this.state.phase !== 'setup' && this.state.phase !== 'battle') {
+        client.send('error', { message: 'Cannot place tower now' })
+        return
+      }
+      const err = this.simulation.handlePlaceTower(client.sessionId, msg.slotId, msg.towerType)
+      if (err) client.send('error', { message: err })
+    })
+
+    this.onMessage('send_unit', (client, msg: { unitType: string }) => {
+      const err = this.simulation.handleSendUnit(client.sessionId, msg.unitType)
+      if (err) client.send('error', { message: err })
+    })
+
+    this.onMessage('surrender', (client) => {
+      if (this.state.phase !== 'battle') return
+      const player = this.state.players.get(client.sessionId)
+      if (!player) return
+      // The other player wins
+      let winnerId = ''
+      this.state.players.forEach((_p, id) => { if (id !== client.sessionId) winnerId = id })
+      this.endGame(winnerId, 'surrender')
+    })
   }
 
   onJoin(client: Client, options: { playerName?: string; roomCode?: string }) {
@@ -41,14 +78,15 @@ export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMeta
     const name = options.playerName ?? `Player ${this.clients.length}`
 
     const player = new PlayerState()
-    player.id = client.sessionId
-    player.name = name
-    player.side = side
+    player.id       = client.sessionId
+    player.name     = name
+    player.side     = side
+    player.gold     = STARTING_GOLD
+    player.castleHp = CASTLE_HP
 
     this.state.players.set(client.sessionId, player)
     console.log(`[Room ${this.roomId}] ${name} joined as ${side} (${this.clients.length}/${this.maxClients})`)
 
-    // Tell joining client their assigned side and the room code
     client.send('joined', {
       side,
       roomCode: this.metadata.roomCode,
@@ -99,10 +137,8 @@ export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMeta
     console.log(`[Room ${this.roomId}] setup phase — ${SETUP_PHASE_DURATION_S}s`)
     this.broadcast('phase_changed', { phase: 'setup', timer: SETUP_PHASE_DURATION_S })
 
-    // Countdown using clock.setInterval (returns Delayed with .clear())
     const interval = this.clock.setInterval(() => {
       this.state.timer = Math.max(0, this.state.timer - SERVER_TICK_RATE / 1000)
-
       if (this.state.timer <= 0) {
         interval.clear()
         this.startBattlePhase()
@@ -117,11 +153,13 @@ export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMeta
     console.log(`[Room ${this.roomId}] battle phase started`)
     this.broadcast('phase_changed', { phase: 'battle', timer: BATTLE_TIMEOUT_S })
 
-    // Main simulation interval — GameSimulation will be plugged in on T08
     this.setSimulationInterval((deltaTime) => {
       if (this.state.phase !== 'battle') return
+
       this.state.tick++
       this.state.timer = Math.max(0, this.state.timer - deltaTime / 1000)
+
+      this.simulation.update(deltaTime)
 
       if (this.state.timer <= 0) {
         this.endGame(null, 'timeout')
@@ -132,7 +170,7 @@ export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMeta
   endGame(winnerId: string | null, reason: string) {
     if (this.state.phase === 'ended') return
 
-    this.state.phase = 'ended'
+    this.state.phase    = 'ended'
     this.state.winnerId = winnerId ?? ''
 
     console.log(`[Room ${this.roomId}] game over — winner: ${winnerId ?? 'draw'} (${reason})`)
@@ -140,11 +178,11 @@ export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMeta
     const stats: Record<string, object> = {}
     this.state.players.forEach((player, sessionId) => {
       stats[sessionId] = {
-        unitsSent: player.unitsSent,
-        unitsKilled: player.unitsKilled,
-        towersBuilt: player.towersBuilt,
+        unitsSent:       player.unitsSent,
+        unitsKilled:     player.unitsKilled,
+        towersBuilt:     player.towersBuilt,
         towersDestroyed: player.towersDestroyed,
-        damageDealt: player.damageDealt,
+        damageDealt:     player.damageDealt,
       }
     })
 

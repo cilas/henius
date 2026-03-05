@@ -1,3 +1,32 @@
+// Map
+export const TILE_SIZE = 64
+
+// PvP map — waypoints and spawn positions (world px, shared with server)
+const wp = (col: number, row: number) => ({
+  x: col * TILE_SIZE + TILE_SIZE / 2,
+  y: row * TILE_SIZE + TILE_SIZE / 2,
+})
+
+export const PVP_SPAWN_LEFT  = wp(1,  5)  // left castle  { x:   96, y: 352 }
+export const PVP_SPAWN_RIGHT = wp(38, 5)  // right castle { x: 2464, y: 352 }
+
+/** Left units march left→right, destination = right castle */
+export const PVP_WAYPOINTS_L2R = [
+  wp(3,5), wp(3,2), wp(9,2), wp(9,9), wp(15,9), wp(15,3),
+  wp(24,3), wp(24,9), wp(30,9), wp(30,2), wp(36,2), wp(36,5), wp(38,5),
+]
+
+/** Right units march right→left, destination = left castle */
+export const PVP_WAYPOINTS_R2L = [
+  wp(36,5), wp(36,2), wp(30,2), wp(30,9), wp(24,9), wp(24,3),
+  wp(15,3), wp(15,9), wp(9,9), wp(9,2), wp(3,2), wp(3,5), wp(1,5),
+]
+
+/** Encode a grid slot as a single integer (col*100+row) */
+export function encodeSlotId(col: number, row: number): number { return col * 100 + row }
+/** Decode an encoded slotId back to [col, row] */
+export function decodeSlotId(id: number): [number, number] { return [Math.floor(id / 100), id % 100] }
+
 // Server
 export const SERVER_PORT = 2567
 export const SERVER_TICK_RATE = 100 // ms between server ticks (10 Hz)
