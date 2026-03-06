@@ -21,15 +21,23 @@ const TOWER_KEYS: TowerType[] = ['archer', 'warrior', 'lancer', 'monk']
 
 export class PvPUIScene extends Phaser.Scene {
   private mySide: PlayerSide = 'left'
+  private currentGold = 200
 
   private goldText!:   Phaser.GameObjects.Text
   private timerText!:  Phaser.GameObjects.Text
+  private connText!: Phaser.GameObjects.Text
+  private feedbackText!: Phaser.GameObjects.Text
   private myCastleBar!:     Phaser.GameObjects.Graphics
   private enemyCastleBar!:  Phaser.GameObjects.Graphics
 
   private selectedTower: TowerType | null = null
   private towerBtns: Map<TowerType,   Phaser.GameObjects.Container> = new Map()
   private unitBtns:  Map<PvpUnitType, Phaser.GameObjects.Container> = new Map()
+  private unitSentCountTexts: Map<PvpUnitType, Phaser.GameObjects.Text> = new Map()
+  private unitSentCounters: Record<PvpUnitType, number> = {
+    pawn: 0, warrior: 0, lancer: 0, monk: 0,
+  }
+  private eventBindings: Array<{ event: string; fn: (...args: any[]) => void }> = []
 
   constructor() {
     super({ key: 'PvPUIScene' })
@@ -42,11 +50,14 @@ export class PvPUIScene extends Phaser.Scene {
   create(): void {
     this.towerBtns = new Map()
     this.unitBtns  = new Map()
+    this.unitSentCountTexts = new Map()
+    this.unitSentCounters = { pawn: 0, warrior: 0, lancer: 0, monk: 0 }
     this.selectedTower = null
 
     this.buildStatsBar()
     this.buildHudPanel()
     this.listenEvents()
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unlistenEvents())
   }
 
   // ── Stats bar ─────────────────────────────────────────────────────────────
@@ -70,6 +81,20 @@ export class PvPUIScene extends Phaser.Scene {
       fontSize: '18px', fontStyle: 'bold', color: '#ffffff',
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5)
+
+    this.connText = this.add.text(GAME_WIDTH / 2, STATS_HEIGHT - 2, '', {
+      fontSize: '11px',
+      color: '#ffcc66',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(0.5, 1)
+
+    this.feedbackText = this.add.text(GAME_WIDTH - 8, STATS_HEIGHT - 2, '', {
+      fontSize: '11px',
+      color: '#ff8888',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(1, 1)
 
     // My castle HP (left-center)
     const myBarX = GAME_WIDTH * 0.25 + 20
@@ -162,6 +187,14 @@ export class PvPUIScene extends Phaser.Scene {
     container.add(this.add.text(0, BTN_H/2-14, `${cfg.cost}g  ⚔ send`, {
       fontSize: '10px', color: '#dddddd', stroke: '#000000', strokeThickness: 2,
     }).setOrigin(0.5, 0.5))
+    const sentCounter = this.add.text(BTN_W/2 - 8, -BTN_H/2 + 8, '0', {
+      fontSize: '10px',
+      color: '#88ffcc',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(1, 0)
+    container.add(sentCounter)
+    this.unitSentCountTexts.set(type, sentCounter)
 
     container.setInteractive(
       new Phaser.Geom.Rectangle(-BTN_W/2, -BTN_H/2, BTN_W, BTN_H),
@@ -182,6 +215,9 @@ export class PvPUIScene extends Phaser.Scene {
     })
     container.on('pointerout',  resetOverlay)
     container.on('pointerdown', () => {
+      if (this.currentGold < UNIT_STATS[type].cost) {
+        this.game.events.emit('pvp-insufficient-gold', { kind: 'unit', type, need: UNIT_STATS[type].cost })
+      }
       this.game.events.emit('pvp-send-unit', { type })
     })
 
@@ -285,32 +321,37 @@ export class PvPUIScene extends Phaser.Scene {
   // ── Event listeners ───────────────────────────────────────────────────────
 
   private listenEvents(): void {
-    this.game.events.on('pvp-gold', (gold: number) => {
+    const onGoldText = (gold: number) => {
+      this.currentGold = gold
       this.goldText.setText(`${gold}g`)
-    })
+    }
+    this.bindEvent('pvp-gold', onGoldText)
 
-    this.game.events.on('pvp-castle-hp', (data: { side: PlayerSide; hp: number; maxHp: number }) => {
+    const onCastleHp = (data: { side: PlayerSide; hp: number; maxHp: number }) => {
       const ratio = data.hp / data.maxHp
       const color = ratio > 0.5 ? 0x33ee44 : ratio > 0.25 ? 0xffaa00 : 0xee2222
       const isMine = data.side === this.mySide
       if (isMine) this.renderCastleBar(this.myCastleBar,    GAME_WIDTH * 0.25 + 20, ratio, color)
       else         this.renderCastleBar(this.enemyCastleBar, GAME_WIDTH * 0.75 - 20, ratio, color)
-    })
+    }
+    this.bindEvent('pvp-castle-hp', onCastleHp)
 
-    this.game.events.on('pvp-timer', (totalSecs: number) => {
+    const onTimer = (totalSecs: number) => {
       const m = Math.floor(totalSecs / 60).toString().padStart(2, '0')
       const s = (totalSecs % 60).toString().padStart(2, '0')
       this.timerText.setText(`${m}:${s}`)
-    })
+    }
+    this.bindEvent('pvp-timer', onTimer)
 
     // Keep in sync if PvPGameScene emits pvp-select-tower externally
-    this.game.events.on('pvp-select-tower', (type: TowerType | null) => {
+    const onSelectTower = (type: TowerType | null) => {
       this.selectedTower = type
       this.refreshTowerBtns()
-    })
+    }
+    this.bindEvent('pvp-select-tower', onSelectTower)
 
     // Disable unit/tower buttons if not enough gold
-    this.game.events.on('pvp-gold', (gold: number) => {
+    const onGoldButtons = (gold: number) => {
       for (const [type, container] of this.unitBtns) {
         const alpha = gold >= UNIT_STATS[type].cost ? 1 : 0.45
         container.setAlpha(alpha)
@@ -319,6 +360,89 @@ export class PvPUIScene extends Phaser.Scene {
         const alpha = gold >= TOWER_STATS[type].cost ? 1 : 0.45
         container.setAlpha(alpha)
       }
+    }
+    this.bindEvent('pvp-gold', onGoldButtons)
+
+    const onInsufficientGold = (data: { kind?: string; type?: string; need?: number }) => {
+      this.showFeedback(data.need ? `Ouro insuficiente (${data.need}g)` : 'Ouro insuficiente')
+      if (data.kind === 'unit' && data.type) {
+        const btn = this.unitBtns.get(data.type as PvpUnitType)
+        if (btn) this.flashButton(btn, 0xdd4444)
+      } else if (data.kind === 'tower' && data.type) {
+        const btn = this.towerBtns.get(data.type as TowerType)
+        if (btn) this.flashButton(btn, 0xdd4444)
+      } else {
+        for (const btn of this.unitBtns.values()) this.flashButton(btn, 0xaa3333, 80)
+      }
+    }
+    this.bindEvent('pvp-insufficient-gold', onInsufficientGold)
+
+    const onUnitSent = (data: { type: PvpUnitType }) => {
+      this.unitSentCounters[data.type] += 1
+      const txt = this.unitSentCountTexts.get(data.type)
+      if (txt) {
+        txt.setText(String(this.unitSentCounters[data.type]))
+        this.tweens.add({
+          targets: txt,
+          scaleX: 1.28,
+          scaleY: 1.28,
+          yoyo: true,
+          duration: 120,
+        })
+      }
+      const btn = this.unitBtns.get(data.type)
+      if (btn) this.flashButton(btn, 0x44aa66, 90)
+    }
+    this.bindEvent('pvp-unit-sent', onUnitSent)
+
+    const onFeedback = (message: string) => this.showFeedback(message)
+    this.bindEvent('pvp-feedback', onFeedback)
+
+    const onOpponentConnection = (message: string) => {
+      this.connText.setText(message)
+      this.time.delayedCall(4000, () => {
+        if (this.connText.text === message) this.connText.setText('')
+      })
+    }
+    this.bindEvent('pvp-opponent-connection', onOpponentConnection)
+  }
+
+  private flashButton(
+    button: Phaser.GameObjects.Container,
+    color: number,
+    duration = 120,
+  ): void {
+    const flash = this.add.rectangle(button.x, button.y, BTN_W - 8, BTN_H - 8, color, 0.34)
+      .setDepth(5000)
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      duration,
+      onComplete: () => flash.destroy(),
     })
+  }
+
+  private showFeedback(message: string): void {
+    this.feedbackText.setText(message)
+    this.feedbackText.setAlpha(1)
+    this.tweens.killTweensOf(this.feedbackText)
+    this.tweens.add({
+      targets: this.feedbackText,
+      alpha: 0,
+      delay: 1500,
+      duration: 400,
+    })
+  }
+
+  private bindEvent(event: string, fn: (...args: any[]) => void): void {
+    this.game.events.on(event, fn)
+    this.eventBindings.push({ event, fn })
+  }
+
+  private unlistenEvents(): void {
+    for (const binding of this.eventBindings) {
+      this.game.events.off(binding.event, binding.fn)
+    }
+    this.eventBindings = []
   }
 }

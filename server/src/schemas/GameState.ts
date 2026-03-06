@@ -5,6 +5,7 @@ import { UnitState } from './UnitState'
 export class GameState extends Schema {
   // 'waiting' | 'setup' | 'battle' | 'ended'
   @type('string') phase: string = 'waiting'
+  @type('string') roomCode: string = ''
   @type('number') tick: number = 0
   @type('number') seed: number = 0
 

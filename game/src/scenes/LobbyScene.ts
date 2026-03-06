@@ -28,6 +28,7 @@ export class LobbyScene extends Phaser.Scene {
   private playerSlots: PlayerSlot[] = []
   private readyBtn!: Phaser.GameObjects.Container
   private isReady = false
+  private activeRoom: Room | null = null
 
   // ── Keyboard ─────────────────────────────────────────────────────────────
   private codeDisplayTxt!: Phaser.GameObjects.Text
@@ -254,11 +255,9 @@ export class LobbyScene extends Phaser.Scene {
       return
     }
 
-    // When joining, the server sends 'joined' with room metadata
-    result.data.onMessage('joined', (data: { roomCode: string; side: string }) => {
-      this.mySide = data.side as 'left' | 'right'
-      this.enterWaitingRoom(result.data, data.roomCode)
-    })
+    const roomCode = this.resolveRoomCode(result.data)
+    this.resolveMySide(result.data)
+    this.enterWaitingRoom(result.data, roomCode)
   }
 
   private onReady(): void {
@@ -272,6 +271,7 @@ export class LobbyScene extends Phaser.Scene {
 
   private async onLeave(): Promise<void> {
     await NetworkManager.get().disconnect()
+    this.activeRoom = null
     this.isReady = false
     this.showView('menu')
   }
@@ -279,22 +279,83 @@ export class LobbyScene extends Phaser.Scene {
   // ── Waiting room setup ────────────────────────────────────────────────────
 
   private enterWaitingRoom(room: Room, roomCode: string): void {
+    this.activeRoom = room
     this.roomCodeTxt.setText(roomCode)
     this.isReady = false
     this.readyBtn.setAlpha(1)
     this.resetPlayerSlots()
     this.showView('waiting')
 
+    this.syncLobbyFromState(room)
+
+    room.onStateChange((state: unknown) => {
+      if (this.activeRoom !== room) return
+      this.syncLobbyFromState(room, state)
+    })
+
     // Listen for server-driven phase change (battle starts)
     room.onMessage('phase_changed', (data: { phase: string }) => {
       if (data.phase === 'battle' || data.phase === 'setup') {
-        this.scene.start('PvPGameScene', { side: this.mySide })
+        this.resolveMySide(room)
+        this.scene.start('PvPGameScene', { side: this.mySide, room })
       }
     })
+  }
 
-    // Self-update: mark our slot immediately when we join
-    room.onMessage('joined', (data: { side: string }) => {
-      this.mySide = data.side as 'left' | 'right'
+  private resolveRoomCode(room: Room): string {
+    const state = room.state as { roomCode?: unknown }
+    return typeof state.roomCode === 'string' ? state.roomCode : room.roomId
+  }
+
+  private resolveMySide(room: Room): void {
+    const players = (room.state as { players?: { get?: (id: string) => { side?: string } | undefined } }).players
+    const me = players?.get?.(room.sessionId)
+    if (me?.side === 'left' || me?.side === 'right') {
+      this.mySide = me.side
+    }
+  }
+
+  private syncLobbyFromState(room: Room, rawState?: unknown): void {
+    const state = (rawState ?? room.state) as {
+      players?: {
+        get?: (id: string) => { side?: string } | undefined
+        forEach?: (cb: (player: {
+          id?: string
+          name?: string
+          side?: string
+          ready?: boolean
+        }, key: string) => void) => void
+      }
+    }
+
+    this.resolveMySide(room)
+
+    const slots = {
+      left: this.playerSlots[0],
+      right: this.playerSlots[1],
+    } as const
+
+    const baseLabels = {
+      left: 'Jogador 1 (Esquerda)',
+      right: 'Jogador 2 (Direita)',
+    } as const
+
+    for (const side of ['left', 'right'] as const) {
+      slots[side].nameTxt.setText(baseLabels[side])
+      slots[side].statusTxt.setText('Aguardando...')
+      slots[side].statusTxt.setColor('#667788')
+    }
+
+    state.players?.forEach?.((player, key) => {
+      const side = player.side === 'right' ? 'right' : 'left'
+      const slot = slots[side]
+      const isMe = key === room.sessionId
+      const name = isMe ? 'Você' : (player.name || 'Jogador')
+      const ready = !!player.ready
+
+      slot.nameTxt.setText(name)
+      slot.statusTxt.setText(ready ? 'Pronto! ✓' : 'Conectado')
+      slot.statusTxt.setColor(ready ? '#44aa44' : '#aabbdd')
     })
   }
 
@@ -377,10 +438,25 @@ export class LobbyScene extends Phaser.Scene {
       color: '#ffffff', stroke: '#1a3a6a', strokeThickness: 3,
     }).setOrigin(0.5)
 
+    const reset = () => {
+      normal.clearTint()
+      normal.setVisible(true)
+      pressed.setVisible(false)
+      txt.setY(0)
+    }
+    const applyPressed = () => {
+      normal.setVisible(false)
+      pressed.setVisible(true)
+      txt.setY(4)
+    }
+
     normal.on('pointerover', () => normal.setTint(0xddeeFF))
-    normal.on('pointerout', () => { normal.clearTint(); normal.setVisible(true); pressed.setVisible(false); txt.setY(0) })
-    normal.on('pointerdown', () => { normal.setVisible(false); pressed.setVisible(true); txt.setY(4) })
-    normal.on('pointerup', () => { normal.setVisible(true); pressed.setVisible(false); txt.setY(0); onClick() })
+    normal.on('pointerout', reset)
+    normal.on('pointerdown', applyPressed)
+    normal.on('pointerup', () => { reset(); onClick() })
+    pressed.setInteractive({ cursor: 'pointer' })
+    pressed.on('pointerup', () => { reset(); onClick() })
+    pressed.on('pointerout', reset)
 
     container.add([normal, pressed, txt])
     return container

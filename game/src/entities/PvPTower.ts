@@ -11,6 +11,7 @@ const BAR_HEIGHT = 5
  * and updated via `updateHp()`. Triggers a destruction animation at 0 HP.
  */
 export class PvPTower extends Phaser.GameObjects.Container {
+  readonly towerId?: string
   readonly towerType: TowerType
   isDestroyed: boolean
 
@@ -19,12 +20,20 @@ export class PvPTower extends Phaser.GameObjects.Container {
   private hp: number
   private maxHp: number
 
-  constructor(scene: Phaser.Scene, col: number, row: number, type: TowerType, hp: number) {
+  constructor(
+    scene: Phaser.Scene,
+    col: number,
+    row: number,
+    type: TowerType,
+    hp: number,
+    towerId?: string,
+  ) {
     const x = col * TILE_SIZE + TILE_SIZE / 2
     const y = row * TILE_SIZE + TILE_SIZE / 2
     super(scene, x, y)
 
     this.towerType   = type
+    this.towerId     = towerId
     this.hp          = hp
     this.maxHp       = hp
     this.isDestroyed = false
@@ -52,6 +61,28 @@ export class PvPTower extends Phaser.GameObjects.Container {
     this.hpBar = scene.add.graphics()
     this.hpBar.setDepth(20000)
     this.drawHpBar()
+  }
+
+  flashAttackTo(targetX: number, targetY: number): void {
+    if (this.isDestroyed) return
+
+    const beam = this.scene.add.graphics().setDepth(this.depth + 2)
+    const color = this.towerType === 'archer' ? 0x88ccff : this.towerType === 'monk' ? 0x88ff88 : 0xffdd88
+    beam.lineStyle(2, color, 0.9)
+    beam.lineBetween(this.x, this.y - 14, targetX, targetY - 8)
+
+    const flash = this.scene.add.circle(this.x, this.y - 14, 8, color, 0.7)
+      .setDepth(this.depth + 3)
+
+    this.scene.tweens.add({
+      targets: [beam, flash],
+      alpha: 0,
+      duration: 140,
+      onComplete: () => {
+        beam.destroy()
+        flash.destroy()
+      },
+    })
   }
 
   updateHp(hp: number, maxHp: number): void {
@@ -85,6 +116,11 @@ export class PvPTower extends Phaser.GameObjects.Container {
     explosion.setScale(0.8).setDepth(this.depth + 1)
     explosion.play('explosion')
     explosion.once('animationcomplete', () => explosion.destroy())
+
+    const debris = this.scene.add.sprite(this.x, this.y + 6, 'dust')
+    debris.setScale(0.85).setDepth(this.depth + 1).setAlpha(0.85)
+    debris.play('dust')
+    debris.once('animationcomplete', () => debris.destroy())
 
     this.scene.tweens.add({
       targets: this,

@@ -3,6 +3,15 @@ import { SERVER_PORT } from '../../../shared/src/Constants'
 
 const SERVER_URL = `ws://localhost:${SERVER_PORT}`
 const ROOM_NAME = 'kingdom_wars'
+const PVP_SESSION_KEY = 'kw:pvp-session'
+const RECONNECT_TIMEOUT_MS = 30_000
+
+export type ReconnectEvent =
+  | { status: 'reconnecting'; secondsLeft: number }
+  | { status: 'reconnected'; room: Room }
+  | { status: 'failed' }
+
+type ReconnectListener = (event: ReconnectEvent) => void
 
 /**
  * Singleton that wraps the Colyseus client.
@@ -12,6 +21,9 @@ export class NetworkManager {
   private static instance: NetworkManager
   private client: Client
   private _room: Room | null = null
+  private reconnectListeners = new Set<ReconnectListener>()
+  private reconnectInProgress = false
+  private intentionalLeave = false
 
   private constructor() {
     this.client = new Client(SERVER_URL)
@@ -32,32 +44,24 @@ export class NetworkManager {
     return this._room !== null
   }
 
+  onReconnect(listener: ReconnectListener): () => void {
+    this.reconnectListeners.add(listener)
+    return () => this.reconnectListeners.delete(listener)
+  }
+
   /** Create a new room. Returns the room code to share. */
   async createRoom(playerName: string): Promise<{ room: Room; roomCode: string }> {
-    this._room = await this.client.create(ROOM_NAME, { playerName })
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Timeout ao criar sala')), 5000)
-
-      this._room!.onMessage('joined', (data: { roomCode: string; side: string; seed: number }) => {
-        clearTimeout(timeout)
-        resolve({ room: this._room!, roomCode: data.roomCode })
-      })
-
-      this._room!.onError((code, message) => {
-        clearTimeout(timeout)
-        reject(new Error(message ?? `Erro ${code}`))
-      })
-    })
+    const room = await this.client.create(ROOM_NAME, { playerName })
+    this.attachRoom(room)
+    const roomCode = this.getRoomCodeFromState(room)
+    return { room, roomCode }
   }
 
   /** Join an existing room by its 6-char code. */
   async joinRoom(roomCode: string, playerName: string): Promise<Room> {
-    this._room = await this.client.join(ROOM_NAME, {
-      roomCode: roomCode.toUpperCase(),
-      playerName,
-    })
-    return this._room
+    const room = await this.client.joinById(roomCode.toUpperCase(), { playerName })
+    this.attachRoom(room)
+    return room
   }
 
   sendReady(): void {
@@ -67,8 +71,102 @@ export class NetworkManager {
   /** Cleanly leave and clear the active room. */
   async disconnect(): Promise<void> {
     if (this._room) {
-      await this._room.leave()
-      this._room = null
+      this.intentionalLeave = true
+      try {
+        await this._room.leave()
+      } finally {
+        this._room = null
+        this.intentionalLeave = false
+      }
     }
+    this.clearSession()
+  }
+
+  async reconnectFromStoredSession(): Promise<Room | null> {
+    const session = this.loadSession()
+    if (!session) return null
+
+    try {
+      const room = await this.client.reconnect(session.reconnectionToken)
+      this.attachRoom(room)
+      this.emitReconnect({ status: 'reconnected', room })
+      return room
+    } catch {
+      this.clearSession()
+      return null
+    }
+  }
+
+  private attachRoom(room: Room): void {
+    this._room = room
+    this.storeSession(room)
+
+    room.onLeave(() => {
+      this._room = null
+      if (this.intentionalLeave || this.reconnectInProgress) return
+      void this.tryAutoReconnect()
+    })
+  }
+
+  private async tryAutoReconnect(): Promise<void> {
+    const session = this.loadSession()
+    if (!session || this.reconnectInProgress) {
+      this.emitReconnect({ status: 'failed' })
+      return
+    }
+
+    this.reconnectInProgress = true
+    const deadline = Date.now() + RECONNECT_TIMEOUT_MS
+
+    while (Date.now() < deadline) {
+      const secondsLeft = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+      this.emitReconnect({ status: 'reconnecting', secondsLeft })
+
+      try {
+        const room = await this.client.reconnect(session.reconnectionToken)
+        this.attachRoom(room)
+        this.reconnectInProgress = false
+        this.emitReconnect({ status: 'reconnected', room })
+        return
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
+    }
+
+    this.reconnectInProgress = false
+    this.clearSession()
+    this.emitReconnect({ status: 'failed' })
+  }
+
+  private emitReconnect(event: ReconnectEvent): void {
+    for (const listener of this.reconnectListeners) listener(event)
+  }
+
+  private storeSession(room: Room): void {
+    if (!room.reconnectionToken) return
+    sessionStorage.setItem(PVP_SESSION_KEY, JSON.stringify({
+      reconnectionToken: room.reconnectionToken,
+    }))
+  }
+
+  private loadSession(): { reconnectionToken: string } | null {
+    const raw = sessionStorage.getItem(PVP_SESSION_KEY)
+    if (!raw) return null
+    try {
+      const parsed = JSON.parse(raw) as { reconnectionToken?: unknown }
+      if (typeof parsed.reconnectionToken !== 'string') return null
+      return { reconnectionToken: parsed.reconnectionToken }
+    } catch {
+      return null
+    }
+  }
+
+  private clearSession(): void {
+    sessionStorage.removeItem(PVP_SESSION_KEY)
+  }
+
+  private getRoomCodeFromState(room: Room): string {
+    const state = room.state as { roomCode?: unknown }
+    return typeof state?.roomCode === 'string' ? state.roomCode : room.roomId
   }
 }

@@ -1,8 +1,9 @@
 /**
- * Server-side balance constants.
- * Most values live in @kingdom-wars/shared (shared with client).
- * This file re-exports them for convenient import within server code
- * and adds any server-only overrides.
+ * Server-side balance constants (T12).
+ *
+ * Canonical gameplay numbers live in @kingdom-wars/shared to keep
+ * client/server deterministic. This file documents the selected values
+ * and the intended match profile used for manual balance validation.
  */
 export {
   STARTING_GOLD,
@@ -17,3 +18,20 @@ export {
   TOWER_STATS,
   CASTLE_DAMAGE_MULTIPLIER,
 } from '@kingdom-wars/shared'
+
+/**
+ * Target profile used while polishing PvP:
+ * - average match length: 5-10 minutes
+ * - passive income should keep both sides active (anti-turtle)
+ * - early units are viable but not enough to end match alone
+ */
+export const PVP_BALANCE_PROFILE = {
+  targetMatchDurationMin: 5,
+  targetMatchDurationMax: 10,
+  antiTurtlePriority: true,
+  notes: [
+    'passive income every 10s keeps unit pressure stable',
+    'castle damage multiplier rewards lane breakthrough',
+    'tower rewards prevent full-defense runaway leads',
+  ],
+} as const

@@ -41,7 +41,10 @@ export class Castle extends Phaser.GameObjects.Container {
     this.hp    = hp
     this.maxHp = maxHp
     this.drawHpBar()
-    if (hp < prevHp) this.shake()
+    if (hp < prevHp) {
+      this.shake()
+      this.flashDamage()
+    }
   }
 
   private drawHpBar(): void {
@@ -74,6 +77,17 @@ export class Castle extends Phaser.GameObjects.Container {
       alpha: 0.3,
       duration: 50,
       yoyo: true,
+    })
+  }
+
+  private flashDamage(): void {
+    const flash = this.scene.add.circle(this.x, this.y - 12, 52, 0xff3333, 0.32)
+      .setDepth(this.depth + 2)
+    this.scene.tweens.add({
+      targets: flash,
+      alpha: 0,
+      duration: 140,
+      onComplete: () => flash.destroy(),
     })
   }
 

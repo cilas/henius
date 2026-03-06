@@ -1,5 +1,7 @@
 import Phaser from 'phaser'
 import { GAME_WIDTH, GAME_HEIGHT } from '../config/map.ts'
+import { NetworkManager } from '../network/NetworkManager.ts'
+import type { Room } from 'colyseus.js'
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -21,10 +23,26 @@ export class MenuScene extends Phaser.Scene {
 
     if (tintPress !== undefined) normal.setTint(tintPress)
 
+    const reset = () => {
+      normal.setTint(tintPress ?? 0xffffff)
+      if (tintPress === undefined) normal.clearTint()
+      normal.setVisible(true)
+      pressed.setVisible(false)
+      txt.setY(y)
+    }
+    const applyPressed = () => {
+      normal.setVisible(false)
+      pressed.setVisible(true)
+      txt.setY(y + 4)
+    }
+
     normal.on('pointerover', () => normal.setTint(tintHover))
-    normal.on('pointerout',  () => { normal.setTint(tintPress ?? 0xffffff); if (tintPress === undefined) normal.clearTint(); normal.setVisible(true); pressed.setVisible(false); txt.setY(y) })
-    normal.on('pointerdown', () => { normal.setVisible(false); pressed.setVisible(true); txt.setY(y + 4) })
-    normal.on('pointerup',   () => { normal.setVisible(true);  pressed.setVisible(false); txt.setY(y); onClick() })
+    normal.on('pointerout',  reset)
+    normal.on('pointerdown', applyPressed)
+    normal.on('pointerup',   () => { reset(); onClick() })
+    pressed.setInteractive({ cursor: 'pointer' })
+    pressed.on('pointerup', () => { reset(); onClick() })
+    pressed.on('pointerout', reset)
   }
 
   create(): void {
@@ -161,5 +179,31 @@ export class MenuScene extends Phaser.Scene {
       this.scene.start('GameScene')
       this.scene.launch('UIScene')
     })
+
+    void this.tryResumePvpSession()
+  }
+
+  private async tryResumePvpSession(): Promise<void> {
+    const loading = this.add.text(GAME_WIDTH / 2, 710, 'Tentando reconectar partida PvP...', {
+      fontSize: '14px',
+      color: '#ffdd88',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(0.5)
+
+    const room = await NetworkManager.get().reconnectFromStoredSession()
+    if (!room) {
+      loading.destroy()
+      return
+    }
+
+    const side = this.resolveMySide(room)
+    this.scene.start('PvPGameScene', { room, side })
+  }
+
+  private resolveMySide(room: Room): 'left' | 'right' {
+    const players = (room.state as { players?: { get?: (id: string) => { side?: string } | undefined } }).players
+    const me = players?.get?.(room.sessionId)
+    return me?.side === 'right' ? 'right' : 'left'
   }
 }

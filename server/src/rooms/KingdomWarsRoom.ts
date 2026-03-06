@@ -24,18 +24,23 @@ function generateSeed(): number {
   return Math.floor(Math.random() * 2 ** 31)
 }
 
-export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMetadata }> {
+export class KingdomWarsRoom extends Room<GameState, RoomMetadata> {
   maxClients = MAX_PLAYERS
 
   private simulation!: GameSimulation
+  private disconnectedPlayers = new Set<string>()
+  private roomCode = ''
 
   onCreate(options: { playerName?: string }) {
     const roomCode = generateRoomCode()
+    this.roomCode = roomCode
+    this.roomId = roomCode
 
     this.setState(new GameState())
     this.state.seed = generateSeed()
+    this.state.roomCode = roomCode
 
-    this.metadata = { roomCode, hostName: options.playerName ?? 'Player 1' }
+    void this.setMetadata({ roomCode, hostName: options.playerName ?? 'Player 1' })
     console.log(`[Room ${this.roomId}] created — code: ${roomCode}`)
 
     // Create simulation (state is ready; players join later)
@@ -50,16 +55,16 @@ export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMeta
 
     this.onMessage('place_tower', (client, msg: { slotId: number; towerType: string }) => {
       if (this.state.phase !== 'setup' && this.state.phase !== 'battle') {
-        client.send('error', { message: 'Cannot place tower now' })
+        client.send('error', { message: 'Cannot place tower now', code: 'INVALID_PHASE' })
         return
       }
       const err = this.simulation.handlePlaceTower(client.sessionId, msg.slotId, msg.towerType)
-      if (err) client.send('error', { message: err })
+      if (err) client.send('error', { message: err, code: err.includes('Not enough gold') ? 'INSUFFICIENT_GOLD' : 'INVALID_ACTION' })
     })
 
     this.onMessage('send_unit', (client, msg: { unitType: string }) => {
       const err = this.simulation.handleSendUnit(client.sessionId, msg.unitType)
-      if (err) client.send('error', { message: err })
+      if (err) client.send('error', { message: err, code: err.includes('Not enough gold') ? 'INSUFFICIENT_GOLD' : 'INVALID_ACTION' })
     })
 
     this.onMessage('surrender', (client) => {
@@ -74,6 +79,11 @@ export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMeta
   }
 
   onJoin(client: Client, options: { playerName?: string; roomCode?: string }) {
+    const existing = this.state.players.get(client.sessionId)
+    if (existing) {
+      return
+    }
+
     const side = this.clients.length === 1 ? 'left' : 'right'
     const name = options.playerName ?? `Player ${this.clients.length}`
 
@@ -87,24 +97,46 @@ export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMeta
     this.state.players.set(client.sessionId, player)
     console.log(`[Room ${this.roomId}] ${name} joined as ${side} (${this.clients.length}/${this.maxClients})`)
 
-    client.send('joined', {
-      side,
-      roomCode: this.metadata.roomCode,
-      seed: this.state.seed,
-    })
   }
 
-  // Colyseus 0.17: onLeave receives WebSocket close code (number), not boolean
-  onLeave(client: Client, code?: number) {
+  async onLeave(client: Client, consented?: boolean) {
     const player = this.state.players.get(client.sessionId)
     const name = player?.name ?? client.sessionId
-    console.log(`[Room ${this.roomId}] ${name} left (code: ${code})`)
+    console.log(`[Room ${this.roomId}] ${name} left (consented: ${consented})`)
 
-    if (this.state.phase === 'battle') {
-      console.log(`[Room ${this.roomId}] ${name} disconnected during battle — reconnection handled in T11`)
+    const canReconnect = this.state.phase === 'setup' || this.state.phase === 'battle'
+    if (!canReconnect || !player) {
+      this.state.players.delete(client.sessionId)
+      return
     }
 
-    this.state.players.delete(client.sessionId)
+    this.disconnectedPlayers.add(client.sessionId)
+    this.broadcast('player_connection', {
+      sessionId: client.sessionId,
+      side: player.side,
+      status: 'disconnected',
+      timeoutSec: 30,
+    })
+    console.log(`[Room ${this.roomId}] ${name} disconnected — waiting up to 30s for reconnection`)
+
+    try {
+      const reconnectedClient = await this.allowReconnection(client, 30)
+      this.disconnectedPlayers.delete(reconnectedClient.sessionId)
+      this.broadcast('player_connection', {
+        sessionId: reconnectedClient.sessionId,
+        side: player.side,
+        status: 'reconnected',
+      })
+      console.log(`[Room ${this.roomId}] ${name} reconnected`)
+    } catch {
+      this.disconnectedPlayers.delete(client.sessionId)
+      console.log(`[Room ${this.roomId}] ${name} failed to reconnect in time`)
+      this.state.players.delete(client.sessionId)
+
+      // Automatic forfeit: remaining player wins.
+      const winnerId = this.findOpponentSession(client.sessionId)
+      this.endGame(winnerId, 'forfeit')
+    }
   }
 
   onDispose() {
@@ -155,6 +187,7 @@ export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMeta
 
     this.setSimulationInterval((deltaTime) => {
       if (this.state.phase !== 'battle') return
+      if (this.disconnectedPlayers.size > 0) return
 
       this.state.tick++
       this.state.timer = Math.max(0, this.state.timer - deltaTime / 1000)
@@ -183,6 +216,14 @@ export class KingdomWarsRoom extends Room<{ state: GameState; metadata: RoomMeta
     })
 
     return tie ? null : winnerId
+  }
+
+  private findOpponentSession(sessionId: string): string | null {
+    let opponentId: string | null = null
+    this.state.players.forEach((_player, id) => {
+      if (id !== sessionId) opponentId = id
+    })
+    return opponentId
   }
 
   endGame(winnerId: string | null, reason: string) {

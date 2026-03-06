@@ -334,6 +334,12 @@ export class GameSimulation {
   ): void {
     if (unit.status === 'dead') return
     unit.hp = Math.max(0, unit.hp - damage)
+    this.broadcast('damage_dealt', {
+      sourceId,
+      targetId: unit.id,
+      damage,
+      remainingHp: unit.hp,
+    })
 
     const attackerPlayer = this.state.players.get(rewardToPlayer)
     if (attackerPlayer) attackerPlayer.damageDealt += damage
@@ -357,6 +363,12 @@ export class GameSimulation {
   ): void {
     if (tower.state.hp <= 0) return
     tower.state.hp = Math.max(0, tower.state.hp - damage)
+    this.broadcast('damage_dealt', {
+      sourceId,
+      targetId: tower.state.id,
+      damage,
+      remainingHp: tower.state.hp,
+    })
 
     const attackerPlayer = this.state.players.get(rewardToPlayer)
     if (attackerPlayer) attackerPlayer.damageDealt += damage
