@@ -64,7 +64,9 @@ export class GameSimulation {
   // ── Message handlers ───────────────────────────────────────────────────────
 
   handleSendUnit(sessionId: string, unitType: string): string | null {
-    if (this.state.phase !== 'battle') return 'Battle not active'
+    if (this.state.phase !== 'setup' && this.state.phase !== 'battle') {
+      return 'Unit sending is only available during setup or battle'
+    }
 
     const stats = UNIT_STATS[unitType as UnitType]
     if (!stats) return `Unknown unit type: ${unitType}`

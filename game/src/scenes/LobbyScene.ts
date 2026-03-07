@@ -29,6 +29,7 @@ export class LobbyScene extends Phaser.Scene {
   private readyBtn!: Phaser.GameObjects.Container
   private isReady = false
   private activeRoom: Room | null = null
+  private enteredMatch = false
 
   // ── Keyboard ─────────────────────────────────────────────────────────────
   private codeDisplayTxt!: Phaser.GameObjects.Text
@@ -280,6 +281,7 @@ export class LobbyScene extends Phaser.Scene {
 
   private enterWaitingRoom(room: Room, roomCode: string): void {
     this.activeRoom = room
+    this.enteredMatch = false
     this.roomCodeTxt.setText(roomCode)
     this.isReady = false
     this.readyBtn.setAlpha(1)
@@ -295,10 +297,12 @@ export class LobbyScene extends Phaser.Scene {
 
     // Listen for server-driven phase change (battle starts)
     room.onMessage('phase_changed', (data: { phase: string }) => {
-      if (data.phase === 'battle' || data.phase === 'setup') {
-        this.resolveMySide(room)
-        this.scene.start('PvPGameScene', { side: this.mySide, room })
-      }
+      if (this.activeRoom !== room || this.enteredMatch) return
+      if (data.phase !== 'setup' && data.phase !== 'battle') return
+
+      this.enteredMatch = true
+      this.resolveMySide(room)
+      this.scene.start('PvPGameScene', { side: this.mySide, room })
     })
   }
 

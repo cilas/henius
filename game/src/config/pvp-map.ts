@@ -181,7 +181,7 @@ export const PVP_TOWER_SLOTS_LEFT  = computePvpSlots('left')
 export const PVP_TOWER_SLOTS_RIGHT = computePvpSlots('right')
 
 // ── Economy constants (client-side, mirrors shared/Constants) ─────────────────
-export const PVP_STARTING_GOLD     = 200
+export const PVP_STARTING_GOLD     = 10000
 export const PVP_CASTLE_HP         = 500
 export const PVP_PASSIVE_INCOME    = 5    // gold per interval
 export const PVP_INCOME_INTERVAL_S = 10  // seconds

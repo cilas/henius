@@ -17,11 +17,18 @@ const UNIT_LABELS: Record<PvpUnitType, string> = {
   pawn: 'Pawn', warrior: 'Warrior', lancer: 'Lancer', monk: 'Monk',
 }
 
+const UNIT_PORTRAIT_KEYS: Record<PvpUnitType, string> = {
+  pawn: 'pawn-idle',
+  warrior: 'warrior-idle',
+  lancer: 'lancer-idle',
+  monk: 'monk-idle',
+}
+
 const TOWER_KEYS: TowerType[] = ['archer', 'warrior', 'lancer', 'monk']
 
 export class PvPUIScene extends Phaser.Scene {
   private mySide: PlayerSide = 'left'
-  private currentGold = 200
+  private currentGold = 10000
 
   private goldText!:   Phaser.GameObjects.Text
   private timerText!:  Phaser.GameObjects.Text
@@ -71,7 +78,7 @@ export class PvPUIScene extends Phaser.Scene {
 
     // Gold (left)
     this.add.image(20, STATS_HEIGHT / 2, 'gold-icon').setScale(0.20)
-    this.goldText = this.add.text(38, STATS_HEIGHT / 2, '200g', {
+    this.goldText = this.add.text(38, STATS_HEIGHT / 2, '10000g', {
       fontSize: '16px', fontStyle: 'bold', color: '#ffdd00',
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0, 0.5)
@@ -172,19 +179,30 @@ export class PvPUIScene extends Phaser.Scene {
   private makeUnitButton(bx: number, by: number, type: PvpUnitType): Phaser.GameObjects.Container {
     const cfg  = PVP_UNIT_CONFIGS[type]
     const container = this.add.container(bx, by)
+    const portraitKey = this.getUnitPortraitKey(type)
+    const label = this.getUnitLabel(type)
 
     const slot    = this.add.image(0, 0, 'wood-table-slot').setDisplaySize(BTN_W, BTN_H)
     const overlay = this.add.graphics()
     overlay.fillStyle(0x001a33, 0.28)
     overlay.fillRoundedRect(-BTN_W/2+2, -BTN_H/2+2, BTN_W-4, BTN_H-4, 4)
-    container.add([slot, overlay])
 
-    container.add(this.add.text(-BTN_W/2+8, -BTN_H/2+12, UNIT_LABELS[type], {
+    const portrait = this.add.image(-BTN_W/2 + 28, 2, portraitKey, 0)
+    const portraitH = type === 'lancer' ? 38 : 44
+    portrait.setScale(portraitH / Math.max(portrait.width, portrait.height))
+
+    container.add([slot, overlay, portrait])
+
+    container.add(this.add.text(-BTN_W/2+48, -BTN_H/2+12, label, {
       fontSize: '12px', fontStyle: 'bold', color: '#88ddff',
       stroke: '#000000', strokeThickness: 2,
     }).setOrigin(0, 0.5))
 
-    container.add(this.add.text(0, BTN_H/2-14, `${cfg.cost}g  ⚔ send`, {
+    container.add(this.add.text(-BTN_W/2+48, 2, 'Adicionar no mapa', {
+      fontSize: '9px', color: '#bbd8ff', stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(0, 0.5))
+
+    container.add(this.add.text(0, BTN_H/2-14, `${cfg.cost}g  •  enviar`, {
       fontSize: '10px', color: '#dddddd', stroke: '#000000', strokeThickness: 2,
     }).setOrigin(0.5, 0.5))
     const sentCounter = this.add.text(BTN_W/2 - 8, -BTN_H/2 + 8, '0', {
@@ -234,7 +252,7 @@ export class PvPUIScene extends Phaser.Scene {
     overlay.fillStyle(0x000000, 0.22)
     overlay.fillRoundedRect(-BTN_W/2+2, -BTN_H/2+2, BTN_W-4, BTN_H-4, 4)
 
-    const icon  = this.add.image(-BTN_W/2+26, 0, Tower.getBuildingKey(type))
+    const icon  = this.add.image(-BTN_W/2+26, 0, Tower.getBuildingKey(type, this.mySide))
     const iconH = Math.min(BTN_H - 8, 52)
     icon.setScale(iconH / Math.max(icon.width, icon.height))
 
@@ -444,5 +462,21 @@ export class PvPUIScene extends Phaser.Scene {
       this.game.events.off(binding.event, binding.fn)
     }
     this.eventBindings = []
+  }
+
+  private getUnitPortraitKey(type: PvpUnitType): string {
+    if (this.mySide === 'left') return UNIT_PORTRAIT_KEYS[type]
+
+    switch (type) {
+      case 'pawn':    return 'pawn-idle'
+      case 'warrior': return 'red-warrior-idle'
+      case 'lancer':  return 'red-lancer-idle'
+      case 'monk':    return 'monk-idle'
+    }
+  }
+
+  private getUnitLabel(type: PvpUnitType): string {
+    if (this.mySide === 'left' && type === 'pawn') return 'Archer'
+    return UNIT_LABELS[type]
   }
 }

@@ -1,7 +1,9 @@
+import type { PlayerSide } from '@kingdom-wars/shared'
 import Phaser from 'phaser'
 import { TILE_SIZE } from '../config/map.ts'
 import { Tower } from './Tower.ts'
 import type { TowerType } from '../config/towers.ts'
+import { PVP_LEFT_MAX_COL } from '../config/pvp-map.ts'
 
 const BAR_WIDTH  = 48
 const BAR_HEIGHT = 5
@@ -13,6 +15,7 @@ const BAR_HEIGHT = 5
 export class PvPTower extends Phaser.GameObjects.Container {
   readonly towerId?: string
   readonly towerType: TowerType
+  readonly side: PlayerSide
   isDestroyed: boolean
 
   private sprite: Phaser.GameObjects.Sprite
@@ -34,19 +37,20 @@ export class PvPTower extends Phaser.GameObjects.Container {
 
     this.towerType   = type
     this.towerId     = towerId
+    this.side        = col <= PVP_LEFT_MAX_COL ? 'left' : 'right'
     this.hp          = hp
     this.maxHp       = hp
     this.isDestroyed = false
 
     // Building sprite
-    const building = scene.add.image(0, 0, Tower.getBuildingKey(type))
+    const building = scene.add.image(0, 0, Tower.getBuildingKey(type, this.side))
     const bScale   = (TILE_SIZE * 1.1) / Math.max(building.width, building.height)
     building.setScale(bScale)
     building.setOrigin(0.5, 0.8)
     this.add(building)
 
     // Idle unit sprite standing in front of building
-    const idleAnim  = `${type}-idle`
+    const idleAnim  = PvPTower.getIdleAnim(type, this.side)
     const unitScale = type === 'lancer' ? 0.28 : 0.42
     this.sprite = scene.add.sprite(0, 0, idleAnim)
     this.sprite.setScale(unitScale)
@@ -133,5 +137,18 @@ export class PvPTower extends Phaser.GameObjects.Container {
   destroy(fromScene?: boolean): void {
     if (this.hpBar.active) this.hpBar.destroy()
     super.destroy(fromScene)
+  }
+
+  private static getIdleAnim(type: TowerType, side: PlayerSide): string {
+    if (side === 'left') {
+      return type === 'archer' ? 'archer-idle' : `${type}-idle`
+    }
+
+    switch (type) {
+      case 'archer':  return 'pawn-idle'
+      case 'warrior': return 'red-warrior-idle'
+      case 'lancer':  return 'red-lancer-idle'
+      case 'monk':    return 'monk-idle'
+    }
   }
 }

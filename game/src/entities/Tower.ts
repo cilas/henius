@@ -3,6 +3,7 @@ import { Enemy } from './Enemy.ts'
 import { Projectile } from './Projectile.ts'
 import { TOWER_CONFIGS, type TowerType } from '../config/towers.ts'
 import { TILE_SIZE } from '../config/map.ts'
+import type { PlayerSide } from '@kingdom-wars/shared'
 
 export class Tower extends Phaser.GameObjects.Container {
   readonly towerType: TowerType
@@ -175,12 +176,13 @@ export class Tower extends Phaser.GameObjects.Container {
     this.sprite.setScale(scale)
   }
 
-  static getBuildingKey(type: TowerType): string {
+  static getBuildingKey(type: TowerType, side: PlayerSide = 'left'): string {
+    const prefix = side === 'right' ? 'building-red' : 'building-blue'
     switch (type) {
-      case 'archer':  return 'building-archery'
-      case 'warrior': return 'building-barracks'
-      case 'lancer':  return 'building-tower'
-      case 'monk':    return 'building-monastery'
+      case 'archer':  return `${prefix}-archery`
+      case 'warrior': return `${prefix}-barracks`
+      case 'lancer':  return `${prefix}-tower`
+      case 'monk':    return `${prefix}-monastery`
     }
   }
 

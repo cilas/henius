@@ -46,10 +46,18 @@ export class BootScene extends Phaser.Scene {
     // ── Buildings ─────────────────────────────────────────────────────────────
     this.load.image('castle-blue',     `${ASSETS}/Buildings/Blue Buildings/Castle.png`)
     this.load.image('castle-red',      `${ASSETS}/Buildings/Red Buildings/Castle.png`)
-    this.load.image('building-archery',  `${ASSETS}/Buildings/Blue Buildings/Archery.png`)
-    this.load.image('building-barracks', `${ASSETS}/Buildings/Blue Buildings/Barracks.png`)
-    this.load.image('building-tower',    `${ASSETS}/Buildings/Blue Buildings/Tower.png`)
-    this.load.image('building-monastery',`${ASSETS}/Buildings/Blue Buildings/Monastery.png`)
+    this.load.image('building-archery',       `${ASSETS}/Buildings/Blue Buildings/Archery.png`)
+    this.load.image('building-barracks',      `${ASSETS}/Buildings/Blue Buildings/Barracks.png`)
+    this.load.image('building-tower',         `${ASSETS}/Buildings/Blue Buildings/Tower.png`)
+    this.load.image('building-monastery',     `${ASSETS}/Buildings/Blue Buildings/Monastery.png`)
+    this.load.image('building-blue-archery',  `${ASSETS}/Buildings/Blue Buildings/Archery.png`)
+    this.load.image('building-blue-barracks', `${ASSETS}/Buildings/Blue Buildings/Barracks.png`)
+    this.load.image('building-blue-tower',    `${ASSETS}/Buildings/Blue Buildings/Tower.png`)
+    this.load.image('building-blue-monastery',`${ASSETS}/Buildings/Blue Buildings/Monastery.png`)
+    this.load.image('building-red-archery',   `${ASSETS}/Buildings/Red Buildings/Archery.png`)
+    this.load.image('building-red-barracks',  `${ASSETS}/Buildings/Red Buildings/Barracks.png`)
+    this.load.image('building-red-tower',     `${ASSETS}/Buildings/Red Buildings/Tower.png`)
+    this.load.image('building-red-monastery', `${ASSETS}/Buildings/Red Buildings/Monastery.png`)
     this.load.image('building-house1',   `${ASSETS}/Buildings/Blue Buildings/House1.png`)
 
     // ── UI Elements ───────────────────────────────────────────────────────────

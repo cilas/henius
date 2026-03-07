@@ -40,6 +40,10 @@ export class PvPGameScene extends Phaser.Scene {
   private towerIdBySlot: Map<string, string> = new Map()
   private myGold = 0
   private castleHpBySide: Record<PlayerSide, number> = { left: 0, right: 0 }
+  private isMapDragging = false
+  private dragPointerId: number | null = null
+  private dragStartPointerX = 0
+  private dragStartScrollX = 0
 
   private readonly onSelectTower = (type: TowerType | null) => {
     this.selectedTowerType = type
@@ -219,6 +223,11 @@ export class PvPGameScene extends Phaser.Scene {
     this.game.events.on('pvp-send-unit', this.onSendUnit)
     this.game.events.on('pvp-surrender', this.onSurrender)
     this.game.events.on('pvp-gold', this.onGoldUpdated)
+
+    this.input.on('pointerdown', this.handlePointerDown, this)
+    this.input.on('pointermove', this.handlePointerMove, this)
+    this.input.on('pointerup', this.handlePointerUp, this)
+    this.input.on('pointerupoutside', this.handlePointerUp, this)
   }
 
   private bindRoomMessages(room: Room | null): void {
@@ -396,6 +405,44 @@ export class PvPGameScene extends Phaser.Scene {
     this.reconnectUnsub = null
     this.stateListener?.stop()
     this.stateListener = null
+    this.input.off('pointerdown', this.handlePointerDown, this)
+    this.input.off('pointermove', this.handlePointerMove, this)
+    this.input.off('pointerup', this.handlePointerUp, this)
+    this.input.off('pointerupoutside', this.handlePointerUp, this)
+  }
+
+  private handlePointerDown(pointer: Phaser.Input.Pointer): void {
+    if (this.selectedTowerType || !this.isPointerInsideMapViewport(pointer)) return
+
+    this.isMapDragging = true
+    this.dragPointerId = pointer.id
+    this.dragStartPointerX = pointer.x
+    this.dragStartScrollX = this.cameras.main.scrollX
+  }
+
+  private handlePointerMove(pointer: Phaser.Input.Pointer): void {
+    if (!this.isMapDragging || this.dragPointerId !== pointer.id) return
+
+    const zoom = this.cameras.main.zoom
+    const deltaX = (pointer.x - this.dragStartPointerX) / zoom
+    this.setCameraScrollX(this.dragStartScrollX - deltaX)
+  }
+
+  private handlePointerUp(pointer: Phaser.Input.Pointer): void {
+    if (this.dragPointerId !== pointer.id) return
+    this.isMapDragging = false
+    this.dragPointerId = null
+  }
+
+  private isPointerInsideMapViewport(pointer: Phaser.Input.Pointer): boolean {
+    return pointer.y >= STATS_HEIGHT && pointer.y <= (GAME_HEIGHT - HUD_HEIGHT)
+  }
+
+  private setCameraScrollX(scrollX: number): void {
+    const cam = this.cameras.main
+    const visibleWorldWidth = cam.width / cam.zoom
+    const maxScrollX = Math.max(0, PVP_MAP_WIDTH - visibleWorldWidth)
+    cam.scrollX = Phaser.Math.Clamp(scrollX, 0, maxScrollX)
   }
 
   private flashSlotPlaced(col: number, row: number): void {
@@ -636,12 +683,21 @@ export class PvPGameScene extends Phaser.Scene {
   }
 
   private setupCamera(): void {
-    const zoom       = GAME_WIDTH / PVP_MAP_WIDTH   // 0.5
-    const viewH      = GAME_HEIGHT - HUD_HEIGHT - STATS_HEIGHT
-    this.cameras.main
+    const viewH = GAME_HEIGHT - HUD_HEIGHT - STATS_HEIGHT
+    const zoom = viewH / PVP_MAP_HEIGHT
+    const cam = this.cameras.main
+
+    cam
       .setViewport(0, STATS_HEIGHT, GAME_WIDTH, viewH)
+      .setBounds(0, 0, PVP_MAP_WIDTH, PVP_MAP_HEIGHT)
       .setZoom(zoom)
-      .centerOn(PVP_MAP_WIDTH / 2, PVP_MAP_HEIGHT / 2)
+      .setScroll(0, 0)
+
+    const visibleWorldWidth = GAME_WIDTH / zoom
+    const initialScrollX = this.mySide === 'right'
+      ? PVP_MAP_WIDTH - visibleWorldWidth
+      : 0
+    this.setCameraScrollX(initialScrollX)
   }
 
   // ── Autotile helpers (same algorithm as GameScene) ────────────────────────

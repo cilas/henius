@@ -38,7 +38,7 @@ export const SETUP_PHASE_DURATION_S = 30
 export const BATTLE_TIMEOUT_S = 600 // 10 minutes
 
 // Economy
-export const STARTING_GOLD = 200
+export const STARTING_GOLD = 10000
 export const PASSIVE_INCOME_AMOUNT = 5
 export const PASSIVE_INCOME_INTERVAL_S = 10
 
