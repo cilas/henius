@@ -13,6 +13,7 @@
     "strict": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
+    "types": ["vite/client"],
     "paths": {
       "@kingdom-wars/shared": ["../shared/src/index.ts"]
     }
