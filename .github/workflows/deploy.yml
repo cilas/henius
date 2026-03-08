@@ -7,7 +7,7 @@ on:
 env:
   SERVER_IMAGE: ghcr.io/cilas/henius-server
   GAME_IMAGE: ghcr.io/cilas/henius-game
-  VITE_SERVER_URL: ws://henius-server.cilas.dev
+  VITE_SERVER_URL: wss://henius-server.cilas.dev
 
 jobs:
   build-and-deploy:
