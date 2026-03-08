@@ -1,7 +1,7 @@
 import { Client, Room } from 'colyseus.js'
 import { SERVER_PORT } from '../../../shared/src/Constants'
 
-const SERVER_URL = `ws://localhost:${SERVER_PORT}`
+const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? `ws://localhost:${SERVER_PORT}`
 const ROOM_NAME = 'kingdom_wars'
 const PVP_SESSION_KEY = 'kw:pvp-session'
 const RECONNECT_TIMEOUT_MS = 30_000
