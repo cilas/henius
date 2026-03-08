@@ -5,10 +5,27 @@ import { TOWER_CONFIGS, type TowerType } from '../config/towers.ts'
 import { TILE_SIZE } from '../config/map.ts'
 import type { PlayerSide } from '@kingdom-wars/shared'
 
+// HP per tower type
+const TOWER_HP: Record<TowerType, number> = {
+  archer: 150,
+  warrior: 250,
+  lancer: 200,
+  monk: 100,
+}
+
+const HP_BAR_W = 44
+const HP_BAR_H = 5
+
 export class Tower extends Phaser.GameObjects.Container {
   readonly towerType: TowerType
+  readonly col: number
+  readonly row: number
+  hp: number
+  maxHp: number
+  isDestroyed: boolean
   private sprite: Phaser.GameObjects.Sprite
   private rangeCircle: Phaser.GameObjects.Graphics
+  private hpBar: Phaser.GameObjects.Graphics
   private cooldown: number  // ms remaining
   private target: Enemy | null
   private isAttacking: boolean
@@ -22,6 +39,11 @@ export class Tower extends Phaser.GameObjects.Container {
     super(scene, x, y)
 
     this.towerType = type
+    this.col = col
+    this.row = row
+    this.maxHp = TOWER_HP[type]
+    this.hp = this.maxHp
+    this.isDestroyed = false
     this.cooldown = 0
     this.target = null
     this.isAttacking = false
@@ -55,6 +77,11 @@ export class Tower extends Phaser.GameObjects.Container {
     // Set depth to the bottom edge of the tile so enemies walking in front overlap properly
     this.setDepth(y + TILE_SIZE / 2)
     scene.add.existing(this)
+
+    // HP bar (hidden until first hit)
+    this.hpBar = scene.add.graphics()
+    this.hpBar.setDepth(20001)
+    this.hpBar.setVisible(false)
   }
 
   update(delta: number, enemies: Enemy[], projectiles: Projectile[]): void {
@@ -122,6 +149,53 @@ export class Tower extends Phaser.GameObjects.Container {
     }
   }
 
+  takeDamage(amount: number): void {
+    if (this.isDestroyed) return
+    this.hp = Math.max(0, this.hp - amount)
+    this.hpBar.setVisible(true)
+    this.drawHpBar()
+    if (this.hp <= 0) {
+      this.destroyTower()
+    }
+  }
+
+  private destroyTower(): void {
+    if (this.isDestroyed) return
+    this.isDestroyed = true
+    this.hpBar.destroy()
+    this.rangeCircle.destroy()
+
+    // Explosion FX at tower position
+    const boom = this.scene.add.sprite(this.x, this.y, 'explosion')
+    boom.setScale(0.8).setDepth(this.y + 100)
+    boom.play('explosion')
+    boom.once('animationcomplete', () => boom.destroy())
+
+    this.scene.tweens.add({
+      targets: this,
+      alpha: 0,
+      duration: 200,
+      onComplete: () => { super.destroy() },
+    })
+  }
+
+  private drawHpBar(): void {
+    this.hpBar.clear()
+    const bx = this.x - HP_BAR_W / 2
+    const by = this.y - TILE_SIZE * 1.2
+
+    this.hpBar.fillStyle(0xcc2222)
+    this.hpBar.fillRect(bx, by, HP_BAR_W, HP_BAR_H)
+
+    const ratio = this.hp / this.maxHp
+    const tint = ratio > 0.5 ? 0x22cc22 : ratio > 0.25 ? 0xffaa00 : 0xee2222
+    this.hpBar.fillStyle(tint)
+    this.hpBar.fillRect(bx, by, HP_BAR_W * ratio, HP_BAR_H)
+
+    this.hpBar.lineStyle(1, 0x000000, 0.7)
+    this.hpBar.strokeRect(bx, by, HP_BAR_W, HP_BAR_H)
+  }
+
   showRange(visible: boolean): void {
     this.rangeCircle.setVisible(visible)
   }
@@ -187,7 +261,10 @@ export class Tower extends Phaser.GameObjects.Container {
   }
 
   destroy(fromScene?: boolean): void {
-    this.rangeCircle.destroy()
+    if (!this.isDestroyed) {
+      this.rangeCircle.destroy()
+      if (this.hpBar) this.hpBar.destroy()
+    }
     super.destroy(fromScene)
   }
 }

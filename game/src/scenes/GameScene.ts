@@ -129,7 +129,7 @@ export class GameScene extends Phaser.Scene {
       this.game.events.emit('hud-between-timer', this.waveManager.betweenTimer)
     }
 
-    this.waveManager.update(delta)
+    this.waveManager.update(delta, this.towerManager.towers)
     this.towerManager.update(delta, this.waveManager.enemies)
   }
 

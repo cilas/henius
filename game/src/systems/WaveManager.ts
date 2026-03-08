@@ -1,5 +1,6 @@
 import type Phaser from 'phaser'
 import { Enemy } from '../entities/Enemy.ts'
+import type { AttackTarget } from '../entities/Enemy.ts'
 import { WAVES, TOTAL_WAVES, BETWEEN_WAVE_DELAY } from '../config/waves.ts'
 import type { EnemyType } from '../config/enemies.ts'
 
@@ -57,7 +58,7 @@ export class WaveManager {
     }
   }
 
-  update(delta: number): void {
+  update(delta: number, towers: AttackTarget[] = []): void {
     if (this.state === 'between') {
       this.betweenTimer -= delta
       if (this.betweenTimer <= 0) {
@@ -71,7 +72,7 @@ export class WaveManager {
     }
 
     if (this.state === 'spawning' || this.state === 'active') {
-      this.updateEnemies(delta)
+      this.updateEnemies(delta, towers)
       if (this.spawnQueue.length === 0 && this.enemies.length === 0) {
         this.onWaveComplete(this.currentWave)
         if (this.currentWave >= TOTAL_WAVES) {
@@ -139,7 +140,7 @@ export class WaveManager {
     this.enemies.push(enemy)
   }
 
-  private updateEnemies(delta: number): void {
+  private updateEnemies(delta: number, towers: AttackTarget[]): void {
     const dead: Enemy[] = []
     const reachedCastle: Enemy[] = []
 
@@ -149,7 +150,7 @@ export class WaveManager {
         continue
       }
 
-      const reachedEnd = enemy.update(delta)
+      const reachedEnd = enemy.update(delta, towers)
       if (reachedEnd) {
         reachedCastle.push(enemy)
       }

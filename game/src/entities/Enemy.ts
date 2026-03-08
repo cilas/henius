@@ -2,12 +2,21 @@ import Phaser from 'phaser'
 import { SPAWN_POINT, PATH_WAYPOINTS } from '../config/map.ts'
 import { ENEMY_CONFIGS, type EnemyType } from '../config/enemies.ts'
 
+// Lightweight interface to avoid circular import with Tower
+export interface AttackTarget {
+  x: number
+  y: number
+  isDestroyed: boolean
+  takeDamage(amount: number): void
+}
+
 const WAYPOINT_REACH_DIST = 18  // px — bigger tolerance avoids single-file convergence
 const LANE_SPREAD = 20          // px — slightly tighter spread since sprites are bigger
 const SPEED_JITTER = 0.18       // ±18% speed variation
 const HP_BAR_WIDTH = 56
 const HP_BAR_HEIGHT = 6
 const HP_BAR_FRAME_HEIGHT = 96  // half-height of 192px frame in sprite pixels
+const ENEMY_ATTACK_RANGE = 75   // px — how close enemy must be to start attacking a tower
 
 export class Enemy extends Phaser.GameObjects.Sprite {
   readonly enemyType: EnemyType
@@ -23,6 +32,12 @@ export class Enemy extends Phaser.GameObjects.Sprite {
   // enemy walks a consistent "lane" slightly off the path center.
   private laneOx: number
   private laneOy: number
+
+  // Tower attack state
+  private attackTarget: AttackTarget | null
+  private attackCooldown: number  // ms remaining
+  private readonly attackDamage: number
+  private readonly attackInterval: number  // ms between attacks
 
   constructor(scene: Phaser.Scene, type: EnemyType) {
     const cfg = ENEMY_CONFIGS[type]
@@ -40,6 +55,10 @@ export class Enemy extends Phaser.GameObjects.Sprite {
     this.reward = cfg.reward
     this.isDead = false
     this.waypointIndex = 0
+    this.attackTarget = null
+    this.attackCooldown = 0
+    this.attackDamage = cfg.attackDamage
+    this.attackInterval = 1000 / cfg.attackRate
 
     // Lane offset: a fixed (x, y) displacement applied to every waypoint.
     // We alternate the dominant axis so enemies spread along whichever
@@ -59,9 +78,43 @@ export class Enemy extends Phaser.GameObjects.Sprite {
     this.drawHpBar()
   }
 
-  update(delta: number): boolean {
+  update(delta: number, towers: AttackTarget[] = []): boolean {
     if (this.isDead) return false
 
+    // Check if current attack target is still valid
+    if (this.attackTarget && (this.attackTarget.isDestroyed)) {
+      this.attackTarget = null
+      this.attackCooldown = 0
+      this.play(ENEMY_CONFIGS[this.enemyType].runAnim, true)
+    }
+
+    // If attacking a tower, stay put and hit it
+    if (this.attackTarget) {
+      this.attackCooldown -= delta
+      if (this.attackCooldown <= 0) {
+        this.attackCooldown = this.attackInterval
+        this.attackTarget.takeDamage(this.attackDamage)
+      }
+      this.drawHpBar()
+      return false
+    }
+
+    // Look for a tower blocking the path
+    for (const tower of towers) {
+      if (tower.isDestroyed) continue
+      const dx = tower.x - this.x
+      const dy = tower.y - this.y
+      if (Math.sqrt(dx * dx + dy * dy) <= ENEMY_ATTACK_RANGE) {
+        this.attackTarget = tower
+        this.attackCooldown = this.attackInterval * 0.3  // slight delay before first hit
+        this.setFlipX(dx < 0)
+        this.play(ENEMY_CONFIGS[this.enemyType].idleAnim, true)
+        this.drawHpBar()
+        return false
+      }
+    }
+
+    // Normal path movement
     const wp = PATH_WAYPOINTS[this.waypointIndex]
     if (!wp) return true  // reached castle
 
@@ -86,7 +139,7 @@ export class Enemy extends Phaser.GameObjects.Sprite {
     const speed = this.speed * (delta / 1000)
     this.x += (dx / dist) * speed
     this.y += (dy / dist) * speed
-    
+
     this.setDepth(this.y) // Live Y-sorting
 
     this.drawHpBar()

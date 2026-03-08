@@ -47,9 +47,31 @@ export class TowerManager {
   }
 
   update(delta: number, enemies: Enemy[]): void {
-    // Update towers
+    // Update towers (skip destroyed ones)
     for (const tower of this.towers) {
-      tower.update(delta, enemies, this.projectiles)
+      if (!tower.isDestroyed) {
+        tower.update(delta, enemies, this.projectiles)
+      }
+    }
+
+    // Remove destroyed towers and free their slots
+    const destroyed = this.towers.filter(t => t.isDestroyed)
+    if (destroyed.length > 0) {
+      for (const tower of destroyed) {
+        for (let i = 0; i < TOWER_SLOTS.length; i++) {
+          const [c, r] = TOWER_SLOTS[i]!
+          if (c === tower.col && r === tower.row) {
+            this.slotOccupied[i] = false
+            const zone = this.slotZones[i]
+            if (zone) {
+              zone.setFillStyle(0x00ff00, 0.15)
+              zone.setInteractive({ cursor: 'pointer' })
+            }
+            break
+          }
+        }
+      }
+      this.towers = this.towers.filter(t => !t.isDestroyed)
     }
 
     // Update projectiles
