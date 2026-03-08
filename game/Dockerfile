@@ -12,6 +12,8 @@ WORKDIR /app
 COPY --from=deps /app/game/node_modules ./game/node_modules
 COPY shared/ ./shared/
 COPY game/ ./game/
+# Ensure no stale dist artifacts cause recursive copy loops
+RUN rm -rf game/dist
 # VITE_SERVER_URL is baked into the bundle at build time
 ARG VITE_SERVER_URL
 ENV VITE_SERVER_URL=$VITE_SERVER_URL
