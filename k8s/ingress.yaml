@@ -8,7 +8,7 @@ metadata:
 spec:
   rules:
     # Game client (web app)
-    - host: henius.84.247.165.145.nip.io
+    - host: henius.cilas.dev
       http:
         paths:
           - path: /
@@ -19,7 +19,7 @@ spec:
                 port:
                   number: 80
     # Colyseus game server (WebSocket)
-    - host: server.84.247.165.145.nip.io
+    - host: henius-server.cilas.dev
       http:
         paths:
           - path: /
