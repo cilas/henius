@@ -1,0 +1,84 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  SERVER_IMAGE: ghcr.io/cilas/henius-server
+  GAME_IMAGE: ghcr.io/cilas/henius-game
+  VITE_SERVER_URL: ws://server.84.247.165.145.nip.io
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push server image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: server/Dockerfile
+          push: true
+          tags: |
+            ${{ env.SERVER_IMAGE }}:latest
+            ${{ env.SERVER_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push game image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: game/Dockerfile
+          push: true
+          tags: |
+            ${{ env.GAME_IMAGE }}:latest
+            ${{ env.GAME_IMAGE }}:${{ github.sha }}
+          build-args: |
+            VITE_SERVER_URL=${{ env.VITE_SERVER_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Apply Kubernetes manifests
+        run: kubectl apply -f k8s/
+
+      - name: Deploy server
+        run: |
+          kubectl set image deployment/server \
+            server=${{ env.SERVER_IMAGE }}:${{ github.sha }} \
+            -n henius
+          kubectl rollout status deployment/server -n henius --timeout=120s
+
+      - name: Deploy game
+        run: |
+          kubectl set image deployment/game \
+            game=${{ env.GAME_IMAGE }}:${{ github.sha }} \
+            -n henius
+          kubectl rollout status deployment/game -n henius --timeout=120s
