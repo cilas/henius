@@ -12,8 +12,14 @@ WORKDIR /app
 COPY --from=deps /app/game/node_modules ./game/node_modules
 COPY shared/ ./shared/
 COPY game/ ./game/
-# Ensure no stale dist artifacts cause recursive copy loops
-RUN rm -rf game/dist
+# Copy real asset folders from repo root (game/public/assets is a symlink to ../../
+# which causes Vite's publicDir copy to loop infinitely in Docker)
+RUN rm -f game/public/assets && mkdir -p game/public/assets
+COPY Buildings/ ./game/public/assets/Buildings/
+COPY "Particle FX"/ "./game/public/assets/Particle FX/"
+COPY Terrain/ ./game/public/assets/Terrain/
+COPY "UI Elements"/ "./game/public/assets/UI Elements/"
+COPY Units/ ./game/public/assets/Units/
 # VITE_SERVER_URL is baked into the bundle at build time
 ARG VITE_SERVER_URL
 ENV VITE_SERVER_URL=$VITE_SERVER_URL
