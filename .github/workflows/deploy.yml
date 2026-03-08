@@ -8,6 +8,7 @@ env:
   SERVER_IMAGE: ghcr.io/cilas/henius-server
   GAME_IMAGE: ghcr.io/cilas/henius-game
   VITE_SERVER_URL: wss://henius-server.cilas.dev
+  CERT_MANAGER_VERSION: v1.14.4
 
 jobs:
   build-and-deploy:
@@ -65,6 +66,14 @@ jobs:
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
           chmod 600 ~/.kube/config
+
+      - name: Install cert-manager
+        run: |
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/${{ env.CERT_MANAGER_VERSION }}/cert-manager.yaml
+          kubectl wait --namespace cert-manager \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/instance=cert-manager \
+            --timeout=120s
 
       - name: Apply Kubernetes manifests
         run: kubectl apply -f k8s/
